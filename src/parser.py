@@ -1,19 +1,36 @@
+"""
+Script responsável por iterar sobre os membros da folha, 
+listando cada rubrica do contracheque e das indenizações e seus respectivos valores recebidos por cada membro.
+"""
+
 import re
 import number
 from status import status
 from coleta import coleta_pb2 as Coleta
 
-from headers_keys import (HEADERS, INDENIZATORIAS, OBRIGATORIOS,
-                          REMTEMP, REMUNERACAOBASICA, EVENTUALTEMP, OBRIGATORIOS)
+from headers_keys import (
+    HEADERS,
+    INDENIZATORIAS,
+    OBRIGATORIOS,
+    REMTEMP,
+    REMUNERACAOBASICA,
+    EVENTUALTEMP,
+    OBRIGATORIOS,
+)
 
 
+# Listando os membros da folha de contracheque
 def parse_employees(file, colect_key, month, year):
     employees = {}
     counter = 1
     for row in file:
         if "1  Remuneração" in str(row[0]):
             break
-        if not number.is_nan(row[0]) and str(row[0]) != "Matrícula" and "MEMBROS ATIVOS" not in str(row[0]):
+        if (
+            not number.is_nan(row[0])
+            and str(row[0]) != "Matrícula"
+            and "MEMBROS ATIVOS" not in str(row[0])
+        ):
             member = Coleta.ContraCheque()
             member.id_contra_cheque = colect_key + "/" + str(counter)
             member.chave_coleta = colect_key
@@ -23,9 +40,7 @@ def parse_employees(file, colect_key, month, year):
             member.local_trabalho = row[3]
             member.tipo = Coleta.ContraCheque.Tipo.Value("MEMBRO")
             member.ativo = True
-            member.remuneracoes.CopyFrom(
-                create_remuneration(row, month, year)
-            )
+            member.remuneracoes.CopyFrom(create_remuneration(row, month, year))
 
             employees[str(row[0])] = member
             counter += 1
@@ -33,6 +48,8 @@ def parse_employees(file, colect_key, month, year):
     return employees
 
 
+# Listando cada rubrica da folha de indenizações e seus valores
+# R = Receita; O = Outras
 def remunerations(row):
     remuneration_array = Coleta.Remuneracoes()
     # VERBAS INDENIZATÓRIAS
@@ -56,6 +73,9 @@ def remunerations(row):
     return remuneration_array
 
 
+# Listando cada rubrica do contracheque e seus valores
+# Apenas a Remuneração do Cargo Efetivo é do tipo B = Base
+# Os demais são O, outras remunerações, ou D, descontos
 def create_remuneration(row, month, year):
     remuneration_array = Coleta.Remuneracoes()
     # REMUNERAÇÃO BÁSICA
@@ -85,13 +105,13 @@ def create_remuneration(row, month, year):
         remuneration.natureza = Coleta.Remuneracao.Natureza.Value("D")
         remuneration.categoria = OBRIGATORIOS
         remuneration.item = key
-        remuneration.valor = abs(
-            float(number.format_value(row[value]))) * (-1)
+        remuneration.valor = abs(float(number.format_value(row[value]))) * (-1)
         remuneration_array.remuneracao.append(remuneration)
 
     return remuneration_array
 
 
+# Mapeando as indenizações para cada membro da folha de contracheque
 def update_employees(file_indenizacoes, employees):
     for row in file_indenizacoes:
         registration = str(row[0])
@@ -103,15 +123,17 @@ def update_employees(file_indenizacoes, employees):
     return employees
 
 
+# Executando todas as funções,
+# iterando os contracheques e indenizações e retornando a folha completa
 def parse(data, colect_key):
     employees = {}
     payroll = Coleta.FolhaDePagamento()
-    employees.update(parse_employees(
-        data.contracheques, colect_key, data.month, data.year))
+    employees.update(
+        parse_employees(data.contracheques, colect_key, data.month, data.year)
+    )
 
     if len(employees) == 0:
-        status.exit_from_error(status.Error(
-            status.DataUnavailable, "Sem dados"))
+        status.exit_from_error(status.Error(status.DataUnavailable, "Sem dados"))
 
     update_employees(data.indenizacoes, employees)
 
